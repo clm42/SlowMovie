@@ -19,6 +19,7 @@ import logging
 import glob
 import ffmpeg
 import configargparse
+import subprocess
 from PIL import Image, ImageEnhance
 from fractions import Fraction
 from omni_epd import displayfactory, EPDNotFoundError
@@ -234,6 +235,7 @@ parser.add_argument("-c", "--contrast", default=1.0, type=float, help="adjust im
 parser.add_argument("-l", "--loop", action="store_true", help="loop a single video; otherwise play through the files in the videos directory")
 parser.add_argument("-e", "--epd", help="the name of the display device driver to use")
 parser.add_argument("-o", "--loglevel", default="INFO", type=str.upper, choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], help="minimum importance-level of messages displayed and saved to the logfile (default: %(default)s)")
+parser.add_argument("-L", "--lcd", default=False, choices=[True,False], help="use official 7.5 inch LCD")
 textOverlayGroup = parser.add_mutually_exclusive_group()
 textOverlayGroup.add_argument("-S", "--subtitles", action="store_true", help="display SRT subtitles")
 textOverlayGroup.add_argument("-t", "--timecode", action="store_true", help="display video timecode")
@@ -379,17 +381,24 @@ while True:
     # Use ffmpeg to extract a frame from the movie, letterbox/pillarbox it, and put it in memory as frame.bmp
     generate_frame(currentVideo, "/dev/shm/frame.bmp", msTimecode)
 
-    # Open frame.bmp in PIL
-    pil_im = Image.open("/dev/shm/frame.bmp")
+    if not args.lcd:
+        # Open frame.bmp in PIL
+        pil_im = Image.open("/dev/shm/frame.bmp")
 
-    # Adjust contrast if specified
-    if args.contrast != 1:
-        enhancer = ImageEnhance.Contrast(pil_im)
-        pil_im = enhancer.enhance(args.contrast)
+        # Adjust contrast if specified
+        if args.contrast != 1:
+            enhancer = ImageEnhance.Contrast(pil_im)
+            pil_im = enhancer.enhance(args.contrast)
 
-    # Display the image
-    logger.debug(f"Displaying frame {int(currentFrame)} of {videoFilename} ({(currentFrame/videoInfo['frame_count'])*100:.1f}%)")
-    epd.display(pil_im)
+        # Display the image
+        logger.debug(f"Displaying frame {int(currentFrame)} of {videoFilename} ({(currentFrame/videoInfo['frame_count'])*100:.1f}%)")
+        epd.display(pil_im)
+       
+    else:
+         # Open frame.bmp in FEH
+         if image:
+             image.kill()
+         image = subprocess.Popen(["feh", "--hide-pointer", "-x", "-q", "-B", "black", "-g", "1280x800", "/dev/shm/frame.bmp"])
 
     # Increment the position
     if args.random_frames:
